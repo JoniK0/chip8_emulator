@@ -1,6 +1,9 @@
 use sdl2::pixels::Color;
 
-use crate::{processor::Processor, window::SDL};
+use crate::{
+    processor::{Processor, load_rom},
+    window::SDL,
+};
 pub mod processor;
 pub mod window;
 
@@ -12,6 +15,8 @@ fn main() {
     canvas.present();
 
     let mut processor = Processor::new();
+
+    load_rom();
 
     'running: loop {
         for event in sdl.event_pump.poll_iter() {
