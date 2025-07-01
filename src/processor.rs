@@ -32,17 +32,27 @@ pub fn load_rom() -> () {
         .map(|x| format!("{:02x}", x))
         .collect::<Vec<String>>();
     let new_vec2 = new_vec.chunks(2).collect::<Vec<&[String]>>();
-    let new_vec3 = new_vec2.iter().map(|list| {
-        list.iter()
-            .map(|x| x.chars().map(|y| y.to_string()).collect::<Vec<String>>())
-            .flatten()
-            .into_iter()
-            .map(|x| x.parse().unwrap())
-            .collect::<Vec<String>>()
-    });
+    let new_vec3 = new_vec2
+        .iter()
+        .map(|list| {
+            list.iter()
+                .map(|x| x.chars().map(|y| y.to_string()).collect::<Vec<String>>())
+                .flatten()
+                .into_iter()
+                .map(|x| x.parse().unwrap())
+                .collect::<Vec<String>>()
+        })
+        .collect::<Vec<Vec<String>>>();
 
     for byte in new_vec3 {
-        println!("{:?}", byte);
+        match byte.as_slice() {
+            [n1, n2, n3, n4] => println!("n1: {:?}, n2: {:?}, n3: {:?}, n4: {:?}", n1, n2, n3, n4),
+            other => println!(
+                "Expected to receive four elements but received {:?} instead",
+                other
+            ),
+        };
+        // println!("{:?}", byte);
     }
     // for byte in bytes.iter() {
     //     println!("{:02x}", byte);
