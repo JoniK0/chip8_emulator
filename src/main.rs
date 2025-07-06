@@ -16,7 +16,7 @@ fn main() {
 
     let mut processor = Processor::new();
 
-    load_rom();
+    load_rom(&mut processor);
 
     'running: loop {
         for event in sdl.event_pump.poll_iter() {
