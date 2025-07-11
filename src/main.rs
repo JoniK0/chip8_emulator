@@ -8,7 +8,7 @@ pub mod processor;
 pub mod window;
 
 fn main() {
-    let mut sdl = SDL::new(800, 800, "emulator".to_string());
+    let mut sdl = SDL::new(1024, 512, "emulator".to_string());
     let mut canvas = sdl.window.into_canvas().build().unwrap();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();

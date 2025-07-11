@@ -1,3 +1,8 @@
+//use std::intrinsics::wrapping_add;
+
+//use crate::processor;
+use rand::Rng;
+
 pub struct Processor {
     pc: u16,
     sp: usize,
@@ -59,6 +64,10 @@ pub fn load_rom(processor: &mut Processor) -> () {
             ['6', n2, n3, n4] => load_byte_to_register(processor, n2, n3, n4),
             ['7', n2, n3, n4] => add_byte_to_register(processor, n2, n3, n4),
             ['8', n2, n3, n4] => match_8(processor, (n2, n3, n4)),
+            ['9', n2, n3, '0'] => skip_not_eqaul_registers(processor, n2, n3),
+            ['a', n2, n3, n4] => load_i_register(processor, n2, n3, n4),
+            ['b', n2, n3, n4] => jump_addv0(processor, n2, n3, n4),
+            ['c', n2, n3, n4] => random(processor, n2, n3, n4),
             [n1, n2, n3, n4] => println!("n1: {:?}, n2: {:?}, n3: {:?}, n4: {:?}", n1, n2, n3, n4),
             other => println!(
                 "Expected to receive four elements but received {:?} instead",
@@ -84,6 +93,10 @@ fn match_8(processor: &mut Processor, elements: (&char, &char, &char)) {
         (n1, n2, '2') => bitwise_and(processor, n1, n2),
         (n1, n2, '3') => bitwise_xor(processor, n1, n2),
         (n1, n2, '4') => add_carryflag(processor, n1, n2),
+        (n1, n2, '5') => subtract_registers(processor, n1, n2),
+        (n1, n2, '6') => rightshift_register(processor, n1),
+        (n1, n2, '7') => subtractN_registers(processor, n1, n2),
+        (n1, n2, 'e') => leftshift_register(processor, n1),
         _otherwise => println!("nothing matched to 8"),
     }
 }
@@ -135,6 +148,14 @@ fn skip_eqaul_registers(processor: &mut Processor, n2: &char, n3: &char) {
     }
 }
 
+fn skip_not_eqaul_registers(processor: &mut Processor, n2: &char, n3: &char) {
+    if processor.v_register[n2.to_digit(16).unwrap() as usize]
+        != processor.v_register[n3.to_digit(16).unwrap() as usize]
+    {
+        processor.pc += 1;
+    }
+}
+
 fn load_byte_to_register(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     processor.v_register[n2.to_digit(16).unwrap() as usize] = parse_2chars(n3, n4) as u8;
 }
@@ -178,6 +199,57 @@ fn add_carryflag(processor: &mut Processor, n1: &char, n2: &char) {
         processor.v_register[15] = 0;
     }
     processor.v_register[n1.to_digit(16).unwrap() as usize] = overflow as u8;
+}
+
+fn subtract_registers(processor: &mut Processor, n1: &char, n2: &char) {
+    if processor.v_register[n1.to_digit(16).unwrap() as usize]
+        > processor.v_register[n2.to_digit(16).unwrap() as usize]
+    {
+        processor.v_register[15] = 1;
+    } else {
+        processor.v_register[15] = 0;
+    }
+    processor.v_register[n1.to_digit(16).unwrap() as usize] -=
+        processor.v_register[n2.to_digit(16).unwrap() as usize]; // note: what happens when n2 > n1?
+}
+
+fn rightshift_register(processor: &mut Processor, n1: &char) {
+    let least_sig_bit = processor.v_register[n1.to_digit(16).unwrap() as usize] & 1;
+    processor.v_register[15] = least_sig_bit;
+
+    processor.v_register[n1.to_digit(16).unwrap() as usize] /= 2;
+}
+
+fn subtractN_registers(processor: &mut Processor, n1: &char, n2: &char) {
+    if processor.v_register[n2.to_digit(16).unwrap() as usize]
+        > processor.v_register[n1.to_digit(16).unwrap() as usize]
+    {
+        processor.v_register[15] = 1;
+    } else {
+        processor.v_register[15] = 0;
+    }
+    processor.v_register[n1.to_digit(16).unwrap() as usize] = processor.v_register
+        [n2.to_digit(16).unwrap() as usize]
+        - processor.v_register[n1.to_digit(16).unwrap() as usize]; // note: what happens when n1 > n2?
+}
+
+fn leftshift_register(processor: &mut Processor, n1: &char) {
+    let most_sig_bit = processor.v_register[n1.to_digit(16).unwrap() as usize] & 128;
+    processor.v_register[15] = most_sig_bit;
+    processor.v_register[n1.to_digit(16).unwrap() as usize] /= 2;
+}
+
+fn load_i_register(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
+    processor.i_register = parse_3chars(n2, n3, n4);
+}
+
+fn jump_addv0(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
+    processor.pc = parse_3chars(n2, n3, n4) + processor.v_register[0] as u16;
+}
+
+fn random(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
+    processor.v_register[n2.to_digit(16).unwrap() as usize] =
+        rand::random_range(0..255) & parse_2chars(n3, n4) as u8;
 }
 
 fn parse_3chars(c1: &char, c2: &char, c3: &char) -> u16 {
