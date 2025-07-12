@@ -1,20 +1,14 @@
-//use std::intrinsics::wrapping_add;
-
-//use crate::processor;
-//use sdl2::render::Canvas;
 use sdl2::{pixels::Color, rect::Rect, render::Canvas};
 
 pub const HEIGHT: u32 = 512;
 pub const WIDTH: u32 = 1024;
 pub const PIXEL: u32 = WIDTH / 64;
 
-//use crate::drawbyte;
-
 pub struct Processor {
     pub pc: u16,
     sp: usize,
     memory: [u8; 4096],
-    display: [u8; 32 * 64],
+    pub display: [u8; 32 * 64],
     stack: [u8; 64],
     v_register: [u8; 16],
     i_register: u16,
@@ -43,7 +37,7 @@ impl Processor {
 }
 
 pub fn load_rom() -> Vec<Vec<char>> {
-    let bytes = std::fs::read("./src/Chip8 Picture.ch8").unwrap();
+    let bytes = std::fs::read("./src/debug.ch8").unwrap();
 
     let hex_strings = bytes
         .into_iter()
@@ -83,13 +77,16 @@ pub fn execute(
         ['b', n2, n3, n4] => jump_addv0(processor, n2, n3, n4),
         ['c', n2, n3, n4] => random(processor, n2, n3, n4),
         ['d', n2, n3, n4] => draw(processor, canvas, n2, n3, n4),
+        ['e', _n2, '9', 'e'] => (),
+        ['e', _n2, 'a', '1'] => (),
+        ['f', n2, n3, n4] => match_f(processor, (n2, n3, n4)),
         [n1, n2, n3, n4] => println!("n1: {:?}, n2: {:?}, n3: {:?}, n4: {:?}", n1, n2, n3, n4),
         other => println!(
             "Expected to receive four elements but received {:?} instead",
             other
         ),
     };
-    processor.pc += 1;
+    processor.pc += 2;
 }
 
 fn match_0(processor: &mut Processor, elements: (&char, &char, &char)) {
@@ -117,15 +114,47 @@ fn match_8(processor: &mut Processor, elements: (&char, &char, &char)) {
     }
 }
 
+fn match_f(processor: &mut Processor, elements: (&char, &char, &char)) {
+    match elements {
+        (_n2, '0', '7') => println!("f: {:?}", elements),
+        (_n2, '0', 'a') => println!("f: {:?}", elements),
+        (_n2, '1', '5') => println!("f: {:?}", elements),
+        (_n2, '1', '8') => println!("f: {:?}", elements),
+        (n2, '1', 'e') => {
+            println!("f: {:?}", elements);
+            add_v_to_i_register(processor, n2);
+        }
+        (_n2, '2', '9') => println!("f: {:?}", elements),
+        (_n2, '3', '3') => println!("f: {:?}", elements),
+        (n2, '5', '5') => {
+            println!("f: {:?}", elements);
+            load_registers_to_memory(processor, n2);
+        }
+        (n2, '6', '5') => {
+            println!("f: {:?}", elements);
+            read_memory_to_register(processor, n2);
+        }
+        _ => (),
+    }
+}
+
+fn load_registers_to_memory(processor: &mut Processor, n2: &char) {
+    for n in 0..n2.to_digit(16).unwrap() as usize {
+        processor.memory[processor.i_register as usize + n] = processor.v_register[n];
+    }
+}
+
+fn read_memory_to_register(processor: &mut Processor, n2: &char) {
+    for n in 0..n2.to_digit(16).unwrap() as usize {
+        processor.v_register[n] = processor.memory[processor.i_register as usize + n];
+    }
+}
+
 fn clear_screen(processor: &mut Processor) {
-    //todo!("this function should clear the screen")
     processor.display = [0; 32 * 64];
 }
 
 fn ret(processor: &mut Processor) {
-    //todo!(
-    //    "The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer"
-    //)
     processor.pc = processor.stack[processor.sp] as u16;
     processor.sp -= 1;
 }
@@ -134,15 +163,15 @@ fn jump(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     str.push(*n2);
     str.push(*n3);
     str.push(*n4);
+    println!("String jump: {:?}", str);
     let address = u16::from_str_radix(&str, 16).unwrap();
-    //let address: u16 = str.parse().unwrap();
-    processor.pc = address - 1;
+    processor.pc = address - 2;
 }
 
 fn call(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     processor.sp += 1;
     processor.stack[processor.sp] = processor.pc as u8; //note: pc as u8 only temporary solution
-    processor.pc = parse_3chars(n2, n3, n4);
+    processor.pc = parse_3chars(n2, n3, n4) - 2;
 }
 
 fn skip_eqaul(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
@@ -182,11 +211,6 @@ fn load_register_to_register(processor: &mut Processor, n1: &char, n2: &char) {
 }
 
 fn add_byte_to_register(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
-    //print!(
-    //    "adder: {:?}, {:?}",
-    //    processor.v_register[n2.to_digit(16).unwrap() as usize],
-    //    parse_2chars(n3, n4) as u8
-    //);
     processor.v_register[n2.to_digit(16).unwrap() as usize] += parse_2chars(n3, n4) as u8; // note: unhandled overflow
 }
 
@@ -279,33 +303,47 @@ fn draw(
         let x = processor.v_register[n1.to_digit(16).unwrap() as usize] as usize;
         let y = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
 
-        for b in 0..9 as usize {
+        //println!("pos x: {:?}, y: {:?}", x, y);
+
+        for b in 0..8 as usize {
             let i_register = processor.i_register as usize;
             // TODO: create constants for the number of pixels on the horizontal
             // and vertiacal axis and use these instead of hard coded numbers 32 and 64
             let y_pos = ((n + y) * 32) % 32;
-            let x_pos = x + b % 64;
+            let x_pos = (x + b) % 64;
             processor.v_register[15] = 0;
             if processor.display[x_pos + y_pos + b] == 1 && processor.memory[i_register + n] == 1 {
                 processor.v_register[15] = 1;
             }
-            processor.display[x_pos + y_pos + b] ^= processor.memory[i_register + n];
+
+            //println!("pos x: {:?}, y: {:?}", x_pos, y_pos);
+            let index = 7 - b;
+            let bit = (processor.memory[i_register + n] >> index) & 1;
+            println!("memory bit: {:?} = {:?}, index: {:?}", b, bit, index);
+
+            processor.display[x_pos + y_pos + b] ^=
+                (processor.memory[i_register + n] >> (7 - b)) & 1;
         }
 
-        drawscreen(canvas);
+        drawscreen(canvas, processor);
     }
 }
 
-pub fn drawscreen(canvas: &mut Canvas<sdl2::video::Window>) {
+pub fn drawscreen(canvas: &mut Canvas<sdl2::video::Window>, processor: &mut Processor) {
     let pixels = 64 * 32;
     for n in 0..pixels {
-        let color = 1;
+        //let color = 1;
+        let color = processor.display[n as usize];
         canvas.set_draw_color(Color::RGB(255 * color, 255 * color, 255 * color));
         let x = (n * PIXEL) % WIDTH;
         let y = (n * PIXEL) / WIDTH * PIXEL;
         let _ = canvas.fill_rect(Rect::new(x as i32, y as i32, PIXEL, PIXEL));
         canvas.present();
     }
+}
+
+fn add_v_to_i_register(processor: &mut Processor, n2: &char) {
+    processor.i_register += processor.v_register[n2.to_digit(16).unwrap() as usize] as u16;
 }
 
 /*
@@ -326,12 +364,11 @@ fn drawbyte(canvas: &mut Canvas<sdl2::video::Window>, byte: u8, x: u32, y: u32) 
 */
 
 fn parse_3chars(c1: &char, c2: &char, c3: &char) -> u16 {
-    // note: this function doesnt work. the number to parse are in hex
+    // NOTE: this function doesn't work. The number to parse are in hex
     let mut str = String::new();
     str.push(*c1);
     str.push(*c2);
     str.push(*c3);
-    //let num: u16 = str.parse().unwrap();
     let num = u16::from_str_radix(&str, 16).unwrap();
     return num;
 }
@@ -339,7 +376,6 @@ fn parse_2chars(c1: &char, c2: &char) -> u16 {
     let mut str = String::new();
     str.push(*c1);
     str.push(*c2);
-    //let num: u8 = str.parse().unwrap();
     let num = u16::from_str_radix(&str, 16).unwrap();
     return num;
 }

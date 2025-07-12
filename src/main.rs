@@ -42,6 +42,13 @@ fn main() {
         }
 
         let program_counter = processor.pc as usize;
+
+        println!(
+            "instr: {:?}, counter: {:?}",
+            program[(program_counter - 512) / 2],
+            (program_counter - 512) / 2
+        );
+        //println!("Display: {:?}", processor.display);
         execute(
             &mut canvas,
             &mut processor,
