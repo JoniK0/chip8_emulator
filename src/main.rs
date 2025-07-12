@@ -1,9 +1,7 @@
-use std::u8;
-
-use sdl2::{pixels::Color, rect::Rect, render::Canvas, sys::Window};
+use sdl2::pixels::Color;
 
 use crate::{
-    processor::{Processor, load_rom},
+    processor::{Processor, execute, load_rom},
     window::SDL,
 };
 pub mod processor;
@@ -22,27 +20,43 @@ fn main() {
 
     canvas.set_draw_color(Color::RGB(255, 255, 255));
 
-    canvas.fill_rect(Rect::new(300, 300, PIXEL, PIXEL));
+    //canvas.fill_rect(Rect::new(300, 300, PIXEL, PIXEL));
     canvas.present();
 
-    drawbyte(&mut canvas, 138, 25, 30);
+    //drawbyte(&mut canvas, 138, 25, 30);
 
     let mut processor = Processor::new();
 
-    load_rom(&mut processor, &mut canvas);
+    let program = load_rom();
 
     'running: loop {
         for event in sdl.event_pump.poll_iter() {
             match event {
                 sdl2::event::Event::Quit { .. } => break 'running,
-                _ => {}
+                _ => {
+                    //let program_counter = processor.pc as usize;
+                    //println!("{:?}", program_counter);
+                    //execute(&mut canvas, &mut processor, &program[program_counter - 512])
+                }
             }
         }
+
+        let program_counter = processor.pc as usize;
+        execute(
+            &mut canvas,
+            &mut processor,
+            &program[(program_counter - 512) / 2],
+        );
+
+        //canvas.set_draw_color(Color::RGB(0, 0, 0));
+        //canvas.clear();
+        //canvas.present();
     }
 
     println!("Hello, world!");
 }
 
+/*
 fn drawbyte(canvas: &mut Canvas<sdl2::video::Window>, byte: u8, x: u32, y: u32) {
     canvas.set_draw_color(Color::RGB(255, 255, 255));
     for n in 0..9 {
@@ -56,4 +70,6 @@ fn drawbyte(canvas: &mut Canvas<sdl2::video::Window>, byte: u8, x: u32, y: u32) 
         ));
         canvas.present();
     }
+
 }
+*/

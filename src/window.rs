@@ -1,7 +1,7 @@
 use sdl2::Sdl;
 
 pub struct SDL {
-    context: Sdl,
+    // context: Sdl,
     pub window: sdl2::video::Window,
     pub event_pump: sdl2::EventPump,
 }
@@ -11,10 +11,10 @@ impl SDL {
         let context: Sdl = sdl2::init().unwrap();
         let vid = context.video().unwrap();
         let win: sdl2::video::Window = vid.window(&name, width, height).build().unwrap();
-        let mut eventpump: sdl2::EventPump = context.event_pump().unwrap();
+        let eventpump: sdl2::EventPump = context.event_pump().unwrap();
 
         SDL {
-            context: context,
+            // context: context,
             window: win,
             event_pump: eventpump,
         }
