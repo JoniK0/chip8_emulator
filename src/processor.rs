@@ -1,17 +1,40 @@
+use std::time::Duration;
+
 use sdl2::{pixels::Color, rect::Rect, render::Canvas};
 
 pub const HEIGHT: u32 = 512;
 pub const WIDTH: u32 = 1024;
 pub const PIXEL: u32 = WIDTH / 64;
 
+const FONTSIZE: usize = 80;
+pub const FONT: [u8; FONTSIZE] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+
 pub struct Processor {
     pub pc: u16,
     sp: usize,
     memory: [u8; 4096],
     pub display: [u8; 32 * 64],
-    stack: [u8; 64],
+    stack: [u16; 64],
     v_register: [u8; 16],
     i_register: u16,
+    delay_timer: u8,
 }
 
 impl Processor {
@@ -23,6 +46,7 @@ impl Processor {
         let sp = 0;
         let v_register = [0; 16];
         let i_register = 0;
+        let delay_timer = 0;
 
         Processor {
             pc,
@@ -32,12 +56,25 @@ impl Processor {
             stack,
             v_register,
             i_register,
+            delay_timer,
         }
     }
 }
 
-pub fn load_rom() -> Vec<Vec<char>> {
-    let bytes = std::fs::read("./src/debug.ch8").unwrap();
+pub fn load_rom(processor: &mut Processor) -> Vec<Vec<char>> {
+    let bytes = std::fs::read("./src/Pong.ch8").unwrap();
+
+    //println!("ROM: {:?}", bytes);
+    //
+    let mut n = 0;
+    for byte in bytes.clone() {
+        processor.memory[512 + n] = byte;
+        n += 1;
+    }
+
+    processor.memory[0..FONTSIZE].copy_from_slice(&FONT);
+
+    //println!("memory: {:?}", processor.memory);
 
     let hex_strings = bytes
         .into_iter()
@@ -57,11 +94,20 @@ pub fn load_rom() -> Vec<Vec<char>> {
     return four_tuples;
 }
 
+fn sleep(processor: &mut Processor) -> () {
+    let dt = processor.delay_timer as u64;
+    if dt > 0 {
+        std::thread::sleep(Duration::from_millis(dt * 100 / 6));
+    }
+    processor.delay_timer = 0;
+}
+
 pub fn execute(
     canvas: &mut Canvas<sdl2::video::Window>,
     processor: &mut Processor,
     instruction: &Vec<char>,
 ) -> () {
+    sleep(processor);
     match instruction.as_slice() {
         ['0', n2, n3, n4] => match_0(processor, (n2, n3, n4)),
         ['1', n2, n3, n4] => jump(processor, n2, n3, n4),
@@ -116,26 +162,28 @@ fn match_8(processor: &mut Processor, elements: (&char, &char, &char)) {
 
 fn match_f(processor: &mut Processor, elements: (&char, &char, &char)) {
     match elements {
-        (_n2, '0', '7') => println!("f: {:?}", elements),
+        (n2, '0', '7') => load_delay_timer(processor, n2),
         (_n2, '0', 'a') => println!("f: {:?}", elements),
-        (_n2, '1', '5') => println!("f: {:?}", elements),
+        (n2, '1', '5') => set_delay_timer(processor, n2),
         (_n2, '1', '8') => println!("f: {:?}", elements),
-        (n2, '1', 'e') => {
-            println!("f: {:?}", elements);
-            add_v_to_i_register(processor, n2);
-        }
-        (_n2, '2', '9') => println!("f: {:?}", elements),
-        (_n2, '3', '3') => println!("f: {:?}", elements),
-        (n2, '5', '5') => {
-            println!("f: {:?}", elements);
-            load_registers_to_memory(processor, n2);
-        }
-        (n2, '6', '5') => {
-            println!("f: {:?}", elements);
-            read_memory_to_register(processor, n2);
-        }
+        (n2, '1', 'e') => add_v_to_i_register(processor, n2),
+        (n2, '2', '9') => load_hex_sprite(processor, n2),
+        (n2, '3', '3') => store_bcd(processor, n2),
+        (n2, '5', '5') => load_registers_to_memory(processor, n2),
+        (n2, '6', '5') => read_memory_to_register(processor, n2),
         _ => (),
     }
+}
+
+fn store_bcd(processor: &mut Processor, n2: &char) {
+    let bcd = processor.v_register[n2.to_digit(16).unwrap() as usize];
+    let hundreds = bcd / 100;
+    let tens = (bcd - hundreds * 100) / 10;
+    let ones = bcd - hundreds * 100 - tens * 10;
+    let index = processor.i_register as usize;
+    processor.memory[index] = hundreds;
+    processor.memory[index + 1] = tens;
+    processor.memory[index + 2] = ones;
 }
 
 fn load_registers_to_memory(processor: &mut Processor, n2: &char) {
@@ -156,6 +204,7 @@ fn clear_screen(processor: &mut Processor) {
 
 fn ret(processor: &mut Processor) {
     processor.pc = processor.stack[processor.sp] as u16;
+    println!("stack: {:?}", processor.stack);
     processor.sp -= 1;
 }
 fn jump(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
@@ -170,18 +219,21 @@ fn jump(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
 
 fn call(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     processor.sp += 1;
-    processor.stack[processor.sp] = processor.pc as u8; //note: pc as u8 only temporary solution
+    println!("pushed pc: {:?}", processor.pc);
+    processor.stack[processor.sp] = processor.pc;
+    println!("stack: {:?}", processor.stack);
+
     processor.pc = parse_3chars(n2, n3, n4) - 2;
 }
 
 fn skip_eqaul(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     if processor.v_register[n2.to_digit(16).unwrap() as usize] == parse_2chars(n3, n4) as u8 {
-        processor.pc += 1;
+        processor.pc += 2;
     }
 }
 fn skip_not_eqaul(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     if processor.v_register[n2.to_digit(16).unwrap() as usize] != parse_2chars(n3, n4) as u8 {
-        processor.pc += 1;
+        processor.pc += 2;
     }
 }
 
@@ -189,7 +241,7 @@ fn skip_eqaul_registers(processor: &mut Processor, n2: &char, n3: &char) {
     if processor.v_register[n2.to_digit(16).unwrap() as usize]
         == processor.v_register[n3.to_digit(16).unwrap() as usize]
     {
-        processor.pc += 1;
+        processor.pc += 2;
     }
 }
 
@@ -197,7 +249,7 @@ fn skip_not_eqaul_registers(processor: &mut Processor, n2: &char, n3: &char) {
     if processor.v_register[n2.to_digit(16).unwrap() as usize]
         != processor.v_register[n3.to_digit(16).unwrap() as usize]
     {
-        processor.pc += 1;
+        processor.pc += 2;
     }
 }
 
@@ -292,6 +344,18 @@ fn random(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
         rand::random_range(0..255) & parse_2chars(n3, n4) as u8;
 }
 
+fn load_hex_sprite(processor: &mut Processor, n2: &char) {
+    processor.i_register = 5 * processor.v_register[n2.to_digit(16).unwrap() as usize] as u16;
+}
+
+fn set_delay_timer(processor: &mut Processor, n2: &char) {
+    processor.delay_timer = processor.v_register[n2.to_digit(16).unwrap() as usize];
+}
+
+fn load_delay_timer(processor: &mut Processor, n2: &char) {
+    processor.v_register[n2.to_digit(16).unwrap() as usize] = processor.delay_timer;
+}
+
 fn draw(
     processor: &mut Processor,
     canvas: &mut Canvas<sdl2::video::Window>,
@@ -299,6 +363,8 @@ fn draw(
     n2: &char,
     n3: &char,
 ) {
+    let mut y_pos;
+
     for n in 0..n3.to_digit(16).unwrap() as usize {
         let x = processor.v_register[n1.to_digit(16).unwrap() as usize] as usize;
         let y = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
@@ -309,19 +375,28 @@ fn draw(
             let i_register = processor.i_register as usize;
             // TODO: create constants for the number of pixels on the horizontal
             // and vertiacal axis and use these instead of hard coded numbers 32 and 64
-            let y_pos = ((n + y) * 32) % 32;
+            //let y_pos = ((n + y) * 32) % 32;
+            y_pos = (y + n) % 32;
             let x_pos = (x + b) % 64;
+
+            //println!("n: {:?}", n);
+            println!("y_pos: {:?}, y: {:?}, n: {:?}", y_pos, y, n);
+
             processor.v_register[15] = 0;
-            if processor.display[x_pos + y_pos + b] == 1 && processor.memory[i_register + n] == 1 {
+            if processor.display[x_pos + (y_pos * 64) + b] == 1
+                && processor.memory[i_register + n] == 1
+            {
                 processor.v_register[15] = 1;
             }
 
             //println!("pos x: {:?}, y: {:?}", x_pos, y_pos);
             let index = 7 - b;
             let bit = (processor.memory[i_register + n] >> index) & 1;
-            println!("memory bit: {:?} = {:?}, index: {:?}", b, bit, index);
+            //println!("memory bit: {:?} = {:?}, index: {:?}", b, bit, index);
+            //
+            //println!("draw data: {:?}", processor.memory[i_register]);
 
-            processor.display[x_pos + y_pos + b] ^=
+            processor.display[x_pos + (y_pos * 64) + b] ^=
                 (processor.memory[i_register + n] >> (7 - b)) & 1;
         }
 
