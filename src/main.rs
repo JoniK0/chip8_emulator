@@ -9,9 +9,9 @@ use crate::{
 pub mod processor;
 pub mod window;
 
-const WIDTH: u32 = 1024;
-const HEIGHT: u32 = 512;
-const PIXEL: u32 = WIDTH / 64;
+pub const WIDTH: u32 = 1024;
+pub const HEIGHT: u32 = 512;
+pub const PIXEL: u32 = WIDTH / 64;
 
 fn main() {
     let mut sdl = SDL::new(WIDTH, HEIGHT, "emulator".to_string());
@@ -29,7 +29,7 @@ fn main() {
 
     let mut processor = Processor::new();
 
-    load_rom(&mut processor);
+    load_rom(&mut processor, &mut canvas);
 
     'running: loop {
         for event in sdl.event_pump.poll_iter() {

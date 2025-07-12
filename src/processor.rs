@@ -2,6 +2,14 @@
 
 //use crate::processor;
 use rand::Rng;
+//use sdl2::render::Canvas;
+use sdl2::{pixels::Color, rect::Rect, render::Canvas};
+
+pub const HEIGHT: u32 = 512;
+pub const WIDTH: u32 = 1024;
+pub const PIXEL: u32 = WIDTH / 64;
+
+//use crate::drawbyte;
 
 pub struct Processor {
     pc: u16,
@@ -35,7 +43,7 @@ impl Processor {
     }
 }
 
-pub fn load_rom(processor: &mut Processor) -> () {
+pub fn load_rom(processor: &mut Processor, canvas: &mut Canvas<sdl2::video::Window>) -> () {
     let bytes = std::fs::read("./src/Pong.ch8").unwrap();
 
     let hex_strings = bytes
@@ -68,6 +76,7 @@ pub fn load_rom(processor: &mut Processor) -> () {
             ['a', n2, n3, n4] => load_i_register(processor, n2, n3, n4),
             ['b', n2, n3, n4] => jump_addv0(processor, n2, n3, n4),
             ['c', n2, n3, n4] => random(processor, n2, n3, n4),
+            ['d', n2, n3, n4] => draw(processor, canvas, n2, n3, n4),
             [n1, n2, n3, n4] => println!("n1: {:?}, n2: {:?}, n3: {:?}, n4: {:?}", n1, n2, n3, n4),
             other => println!(
                 "Expected to receive four elements but received {:?} instead",
@@ -250,6 +259,58 @@ fn jump_addv0(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
 fn random(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     processor.v_register[n2.to_digit(16).unwrap() as usize] =
         rand::random_range(0..255) & parse_2chars(n3, n4) as u8;
+}
+
+fn draw(
+    processor: &mut Processor,
+    canvas: &mut Canvas<sdl2::video::Window>,
+    n1: &char,
+    n2: &char,
+    n3: &char,
+) {
+    for n in 0..n3.to_digit(16).unwrap() as usize {
+        let x = processor.v_register[n1.to_digit(16).unwrap() as usize] as usize;
+        let y = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
+
+        for b in 0..9 as usize {
+            let i_register = processor.i_register as usize;
+            let y_pos = (n + y) * 64;
+            let mut x_pos = x + b;
+            if x_pos >= 64 {
+                x_pos -= 64;
+            }
+            processor.display[x_pos + y_pos + b] ^= processor.memory[i_register + n];
+        }
+    }
+}
+
+fn drawscreen(processor: &mut Processor, canvas: &mut Canvas<sdl2::video::Window>) {
+    let pixels = WIDTH * HEIGHT;
+    for n in 0..pixels {
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.fill_rect(Rect::new(
+            (n % WIDTH) as i32,
+            (n % HEIGHT) as i32,
+            PIXEL,
+            PIXEL,
+        ));
+        canvas.present();
+    }
+}
+
+fn drawbyte(canvas: &mut Canvas<sdl2::video::Window>, byte: u8, x: u32, y: u32) {
+    canvas.set_draw_color(Color::RGB(255, 255, 255));
+    for n in 0..9 {
+        let pixel = (byte >> n) & 1;
+        canvas.set_draw_color(Color::RGB(255 * pixel, 255 * pixel, 255 * pixel));
+        canvas.fill_rect(Rect::new(
+            ((x * PIXEL + PIXEL * 8) - (PIXEL * n)) as i32,
+            (y * PIXEL) as i32,
+            PIXEL,
+            PIXEL,
+        ));
+        canvas.present();
+    }
 }
 
 fn parse_3chars(c1: &char, c2: &char, c3: &char) -> u16 {
