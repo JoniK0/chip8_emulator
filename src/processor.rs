@@ -279,8 +279,16 @@ fn draw(
             if x_pos >= 64 {
                 x_pos -= 64;
             }
+            processor.v_register[15] = 0;
+            if processor.display[x_pos + y_pos + b] == 1
+                && processor.display[x_pos + y_pos + b] == 1
+            {
+                processor.v_register[15] = 1;
+            }
             processor.display[x_pos + y_pos + b] ^= processor.memory[i_register + n];
         }
+
+        drawscreen(processor, canvas);
     }
 }
 
@@ -289,8 +297,8 @@ fn drawscreen(processor: &mut Processor, canvas: &mut Canvas<sdl2::video::Window
     for n in 0..pixels {
         canvas.set_draw_color(Color::RGB(255, 255, 255));
         canvas.fill_rect(Rect::new(
-            (n % WIDTH) as i32,
-            (n % HEIGHT) as i32,
+            ((n % WIDTH) * PIXEL) as i32,
+            ((n % HEIGHT) * PIXEL) as i32,
             PIXEL,
             PIXEL,
         ));
