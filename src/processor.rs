@@ -1,6 +1,7 @@
+use crate::window::SDL;
 use std::time::Duration;
 
-use sdl2::{pixels::Color, rect::Rect, render::Canvas};
+use sdl2::{EventPump, keyboard::Keycode, pixels::Color, rect::Rect, render::Canvas, sys::False};
 
 pub const HEIGHT: u32 = 512;
 pub const WIDTH: u32 = 1024;
@@ -35,6 +36,7 @@ pub struct Processor {
     v_register: [u8; 16],
     i_register: u16,
     delay_timer: u8,
+    pub keys: [bool; 16],
 }
 
 impl Processor {
@@ -47,6 +49,7 @@ impl Processor {
         let v_register = [0; 16];
         let i_register = 0;
         let delay_timer = 0;
+        let keys = [false; 16];
 
         Processor {
             pc,
@@ -57,6 +60,7 @@ impl Processor {
             v_register,
             i_register,
             delay_timer,
+            keys,
         }
     }
 }
@@ -64,8 +68,6 @@ impl Processor {
 pub fn load_rom(processor: &mut Processor) -> Vec<Vec<char>> {
     let bytes = std::fs::read("./src/Pong.ch8").unwrap();
 
-    //println!("ROM: {:?}", bytes);
-    //
     let mut n = 0;
     for byte in bytes.clone() {
         processor.memory[512 + n] = byte;
@@ -73,8 +75,6 @@ pub fn load_rom(processor: &mut Processor) -> Vec<Vec<char>> {
     }
 
     processor.memory[0..FONTSIZE].copy_from_slice(&FONT);
-
-    //println!("memory: {:?}", processor.memory);
 
     let hex_strings = bytes
         .into_iter()
@@ -103,6 +103,7 @@ fn sleep(processor: &mut Processor) -> () {
 }
 
 pub fn execute(
+    event_pump: &mut EventPump,
     canvas: &mut Canvas<sdl2::video::Window>,
     processor: &mut Processor,
     instruction: &Vec<char>,
@@ -123,8 +124,8 @@ pub fn execute(
         ['b', n2, n3, n4] => jump_addv0(processor, n2, n3, n4),
         ['c', n2, n3, n4] => random(processor, n2, n3, n4),
         ['d', n2, n3, n4] => draw(processor, canvas, n2, n3, n4),
-        ['e', _n2, '9', 'e'] => (),
-        ['e', _n2, 'a', '1'] => (),
+        ['e', n2, '9', 'e'] => skip_next_if_key_pressed(processor, n2),
+        ['e', n2, 'a', '1'] => skip_next_if_key_not_pressed(processor, n2),
         ['f', n2, n3, n4] => match_f(processor, (n2, n3, n4)),
         [n1, n2, n3, n4] => println!("n1: {:?}, n2: {:?}, n3: {:?}, n4: {:?}", n1, n2, n3, n4),
         other => println!(
@@ -133,6 +134,44 @@ pub fn execute(
         ),
     };
     processor.pc += 2;
+}
+
+pub fn key_code_to_hex(keycode: sdl2::keyboard::Keycode) -> Option<usize> {
+    match keycode {
+        sdl2::keyboard::Keycode::Num1 => Some(0x01),
+        sdl2::keyboard::Keycode::Num2 => Some(0x02),
+        sdl2::keyboard::Keycode::Num3 => Some(0x03),
+        sdl2::keyboard::Keycode::Num4 => Some(0x0c),
+        sdl2::keyboard::Keycode::Q => Some(0x04),
+        sdl2::keyboard::Keycode::W => Some(0x05),
+        sdl2::keyboard::Keycode::E => Some(0x06),
+        sdl2::keyboard::Keycode::R => Some(0x0d),
+        sdl2::keyboard::Keycode::A => Some(0x07),
+        sdl2::keyboard::Keycode::S => Some(0x08),
+        sdl2::keyboard::Keycode::D => Some(0x09),
+        sdl2::keyboard::Keycode::F => Some(0x0e),
+        sdl2::keyboard::Keycode::Y => Some(0x0A),
+        sdl2::keyboard::Keycode::X => Some(0x00),
+        sdl2::keyboard::Keycode::C => Some(0x0B),
+        sdl2::keyboard::Keycode::V => Some(0x0F),
+        _ => None,
+    }
+}
+
+fn skip_next_if_key_pressed(processor: &mut Processor, n2: &char) {
+    let key = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
+    if processor.keys[key] {
+        processor.pc += 2;
+    }
+}
+
+fn skip_next_if_key_not_pressed(processor: &mut Processor, n2: &char) {
+    let key = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
+    if processor.keys[key] {
+        return;
+    } else {
+        processor.pc += 2;
+    }
 }
 
 fn match_0(processor: &mut Processor, elements: (&char, &char, &char)) {
@@ -163,9 +202,9 @@ fn match_8(processor: &mut Processor, elements: (&char, &char, &char)) {
 fn match_f(processor: &mut Processor, elements: (&char, &char, &char)) {
     match elements {
         (n2, '0', '7') => load_delay_timer(processor, n2),
-        (_n2, '0', 'a') => println!("f: {:?}", elements),
+        (_n2, '0', 'a') => (), //println!("f: {:?}", elements),
         (n2, '1', '5') => set_delay_timer(processor, n2),
-        (_n2, '1', '8') => println!("f: {:?}", elements),
+        (_n2, '1', '8') => (), // println!("f: {:?}", elements),
         (n2, '1', 'e') => add_v_to_i_register(processor, n2),
         (n2, '2', '9') => load_hex_sprite(processor, n2),
         (n2, '3', '3') => store_bcd(processor, n2),
@@ -204,7 +243,6 @@ fn clear_screen(processor: &mut Processor) {
 
 fn ret(processor: &mut Processor) {
     processor.pc = processor.stack[processor.sp] as u16;
-    println!("stack: {:?}", processor.stack);
     processor.sp -= 1;
 }
 fn jump(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
@@ -212,16 +250,13 @@ fn jump(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     str.push(*n2);
     str.push(*n3);
     str.push(*n4);
-    println!("String jump: {:?}", str);
     let address = u16::from_str_radix(&str, 16).unwrap();
     processor.pc = address - 2;
 }
 
 fn call(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
     processor.sp += 1;
-    println!("pushed pc: {:?}", processor.pc);
     processor.stack[processor.sp] = processor.pc;
-    println!("stack: {:?}", processor.stack);
 
     processor.pc = parse_3chars(n2, n3, n4) - 2;
 }
@@ -283,8 +318,8 @@ fn bitwise_xor(processor: &mut Processor, n1: &char, n2: &char) {
 }
 
 fn add_carryflag(processor: &mut Processor, n1: &char, n2: &char) {
-    let overflow: u16 = processor.v_register[n1.to_digit(16).unwrap() as usize] as u16
-        + processor.v_register[n2.to_digit(16).unwrap() as usize] as u16;
+    let overflow: u32 = processor.v_register[n1.to_digit(16).unwrap() as usize] as u32
+        + processor.v_register[n2.to_digit(16).unwrap() as usize] as u32;
     if overflow > 255 {
         processor.v_register[15] = 1;
     } else {
@@ -369,8 +404,6 @@ fn draw(
         let x = processor.v_register[n1.to_digit(16).unwrap() as usize] as usize;
         let y = processor.v_register[n2.to_digit(16).unwrap() as usize] as usize;
 
-        //println!("pos x: {:?}, y: {:?}", x, y);
-
         for b in 0..8 as usize {
             let i_register = processor.i_register as usize;
             // TODO: create constants for the number of pixels on the horizontal
@@ -379,29 +412,28 @@ fn draw(
             y_pos = (y + n) % 32;
             let x_pos = (x + b) % 64;
 
-            //println!("n: {:?}", n);
-            println!("y_pos: {:?}, y: {:?}, n: {:?}", y_pos, y, n);
-
             processor.v_register[15] = 0;
-            if processor.display[x_pos + (y_pos * 64) + b] == 1
-                && processor.memory[i_register + n] == 1
-            {
+            let index = (x_pos + (y_pos * 64) + b) % 2048;
+            //let index = std::cmp::min(x_pos + (y_pos * 64) + b, 2047);
+            if processor.display[index] == 1 && processor.memory[i_register + n] == 1 {
                 processor.v_register[15] = 1;
             }
 
-            //println!("pos x: {:?}, y: {:?}", x_pos, y_pos);
-            let index = 7 - b;
-            let bit = (processor.memory[i_register + n] >> index) & 1;
-            //println!("memory bit: {:?} = {:?}, index: {:?}", b, bit, index);
-            //
-            //println!("draw data: {:?}", processor.memory[i_register]);
-
-            processor.display[x_pos + (y_pos * 64) + b] ^=
-                (processor.memory[i_register + n] >> (7 - b)) & 1;
+            processor.display[index] ^= (processor.memory[i_register + n] >> (7 - b)) & 1;
+            draw_pixel(canvas, processor, index);
         }
 
-        drawscreen(canvas, processor);
+        //drawscreen(canvas, processor);
     }
+}
+
+fn draw_pixel(canvas: &mut Canvas<sdl2::video::Window>, processor: &mut Processor, index: usize) {
+    let color = processor.display[index];
+    canvas.set_draw_color(Color::RGB(255 * color, 255 * color, 255 * color));
+    let x = (index as u32 * PIXEL) % WIDTH;
+    let y = (index as u32 * PIXEL) / WIDTH * PIXEL;
+    let _ = canvas.fill_rect(Rect::new(x as i32, y as i32, PIXEL, PIXEL));
+    canvas.present();
 }
 
 pub fn drawscreen(canvas: &mut Canvas<sdl2::video::Window>, processor: &mut Processor) {
