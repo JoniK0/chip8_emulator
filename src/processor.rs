@@ -103,7 +103,6 @@ fn sleep(processor: &mut Processor) -> () {
 }
 
 pub fn execute(
-    event_pump: &mut EventPump,
     canvas: &mut Canvas<sdl2::video::Window>,
     processor: &mut Processor,
     instruction: &Vec<char>,
@@ -218,7 +217,7 @@ fn store_bcd(processor: &mut Processor, n2: &char) {
     let bcd = processor.v_register[n2.to_digit(16).unwrap() as usize];
     let hundreds = bcd / 100;
     let tens = (bcd - hundreds * 100) / 10;
-    let ones = bcd - hundreds * 100 - tens * 10;
+    let ones = bcd - (hundreds * 100) - (tens * 10);
     let index = processor.i_register as usize;
     processor.memory[index] = hundreds;
     processor.memory[index + 1] = tens;
@@ -226,13 +225,13 @@ fn store_bcd(processor: &mut Processor, n2: &char) {
 }
 
 fn load_registers_to_memory(processor: &mut Processor, n2: &char) {
-    for n in 0..n2.to_digit(16).unwrap() as usize {
+    for n in 0..=n2.to_digit(16).unwrap() as usize {
         processor.memory[processor.i_register as usize + n] = processor.v_register[n];
     }
 }
 
 fn read_memory_to_register(processor: &mut Processor, n2: &char) {
-    for n in 0..n2.to_digit(16).unwrap() as usize {
+    for n in 0..=n2.to_digit(16).unwrap() as usize {
         processor.v_register[n] = processor.memory[processor.i_register as usize + n];
     }
 }
@@ -298,7 +297,7 @@ fn load_register_to_register(processor: &mut Processor, n1: &char, n2: &char) {
 }
 
 fn add_byte_to_register(processor: &mut Processor, n2: &char, n3: &char, n4: &char) {
-    processor.v_register[n2.to_digit(16).unwrap() as usize] += parse_2chars(n3, n4) as u8; // note: unhandled overflow
+    processor.v_register[n2.to_digit(16).unwrap() as usize] += parse_2chars(n3, n4) as u8;
 }
 
 fn bitwise_or(processor: &mut Processor, n1: &char, n2: &char) {
@@ -325,7 +324,8 @@ fn add_carryflag(processor: &mut Processor, n1: &char, n2: &char) {
     } else {
         processor.v_register[15] = 0;
     }
-    processor.v_register[n1.to_digit(16).unwrap() as usize] = overflow as u8;
+    processor.v_register[n1.to_digit(16).unwrap() as usize] +=
+        processor.v_register[n2.to_digit(16).unwrap() as usize];
 }
 
 fn subtract_registers(processor: &mut Processor, n1: &char, n2: &char) {
@@ -413,7 +413,7 @@ fn draw(
             let x_pos = (x + b) % 64;
 
             processor.v_register[15] = 0;
-            let index = (x_pos + (y_pos * 64) + b) % 2048;
+            let index = (x_pos + (y_pos * 64)) % 2048;
             //let index = std::cmp::min(x_pos + (y_pos * 64) + b, 2047);
             if processor.display[index] == 1 && processor.memory[i_register + n] == 1 {
                 processor.v_register[15] = 1;

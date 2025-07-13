@@ -57,7 +57,6 @@ fn main() {
         let program_counter = processor.pc as usize;
         sleep(Duration::from_millis(1));
         processor::execute(
-            &mut sdl.event_pump,
             &mut canvas,
             &mut processor,
             &program[(program_counter - 512) / 2],
