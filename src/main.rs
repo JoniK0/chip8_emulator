@@ -9,12 +9,8 @@ use crate::{
 pub mod processor;
 pub mod window;
 
-pub const WIDTH: u32 = 1024;
-pub const HEIGHT: u32 = 512;
-pub const PIXEL: u32 = WIDTH / 64;
-
 fn main() {
-    let mut sdl = SDL::new(WIDTH, HEIGHT, "emulator".to_string());
+    let mut sdl = SDL::new(processor::WIDTH, processor::HEIGHT, "emulator".to_string());
     let mut canvas = sdl.window.into_canvas().build().unwrap();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
@@ -26,7 +22,7 @@ fn main() {
 
     let mut processor = Processor::new();
 
-    let program = load_rom(&mut processor);
+    let program = load_rom("./src/Tron.ch8", &mut processor);
 
     'running: loop {
         for event in sdl.event_pump.poll_iter() {
@@ -56,6 +52,8 @@ fn main() {
 
         let program_counter = processor.pc as usize;
         sleep(Duration::from_millis(1));
+        let instr = &program[(program_counter - 512) / 2];
+        //println!("instruction: {:?}", instr);
         processor::execute(
             &mut canvas,
             &mut processor,

@@ -1,7 +1,6 @@
-use crate::window::SDL;
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
-use sdl2::{EventPump, keyboard::Keycode, pixels::Color, rect::Rect, render::Canvas, sys::False};
+use sdl2::{pixels::Color, rect::Rect, render::Canvas};
 
 pub const HEIGHT: u32 = 512;
 pub const WIDTH: u32 = 1024;
@@ -65,8 +64,11 @@ impl Processor {
     }
 }
 
-pub fn load_rom(processor: &mut Processor) -> Vec<Vec<char>> {
-    let bytes = std::fs::read("./src/Pong.ch8").unwrap();
+pub fn load_rom<P>(path: P, processor: &mut Processor) -> Vec<Vec<char>>
+where
+    P: AsRef<Path>,
+{
+    let bytes = std::fs::read(path).unwrap();
 
     let mut n = 0;
     for byte in bytes.clone() {
@@ -177,9 +179,11 @@ fn match_0(processor: &mut Processor, elements: (&char, &char, &char)) {
     match elements {
         ('0', 'e', '0') => clear_screen(processor),
         ('0', 'e', 'e') => ret(processor),
-        _otherwise => println!(
-            "This instruction is only used on the old computers on which Chip-8 was originally implemented."
-        ),
+        (n2, n3, n4) => {
+            println!(
+                "This instruction is only used on the old computers on which Chip-8 was originally implemented."
+            );
+        }
     }
 }
 
@@ -408,13 +412,11 @@ fn draw(
             let i_register = processor.i_register as usize;
             // TODO: create constants for the number of pixels on the horizontal
             // and vertiacal axis and use these instead of hard coded numbers 32 and 64
-            //let y_pos = ((n + y) * 32) % 32;
             y_pos = (y + n) % 32;
             let x_pos = (x + b) % 64;
 
             processor.v_register[15] = 0;
             let index = (x_pos + (y_pos * 64)) % 2048;
-            //let index = std::cmp::min(x_pos + (y_pos * 64) + b, 2047);
             if processor.display[index] == 1 && processor.memory[i_register + n] == 1 {
                 processor.v_register[15] = 1;
             }
@@ -422,8 +424,6 @@ fn draw(
             processor.display[index] ^= (processor.memory[i_register + n] >> (7 - b)) & 1;
             draw_pixel(canvas, processor, index);
         }
-
-        //drawscreen(canvas, processor);
     }
 }
 
@@ -453,23 +453,6 @@ fn add_v_to_i_register(processor: &mut Processor, n2: &char) {
     processor.i_register += processor.v_register[n2.to_digit(16).unwrap() as usize] as u16;
 }
 
-/*
-fn drawbyte(canvas: &mut Canvas<sdl2::video::Window>, byte: u8, x: u32, y: u32) {
-    canvas.set_draw_color(Color::RGB(255, 255, 255));
-    for n in 0..9 {
-        let pixel = (byte >> n) & 1;
-        canvas.set_draw_color(Color::RGB(255 * pixel, 255 * pixel, 255 * pixel));
-        canvas.fill_rect(Rect::new(
-            ((x * PIXEL + PIXEL * 8) - (PIXEL * n)) as i32,
-            (y * PIXEL) as i32,
-            PIXEL,
-            PIXEL,
-        ));
-        canvas.present();
-    }
-}
-*/
-
 fn parse_3chars(c1: &char, c2: &char, c3: &char) -> u16 {
     // NOTE: this function doesn't work. The number to parse are in hex
     let mut str = String::new();
@@ -486,4 +469,3 @@ fn parse_2chars(c1: &char, c2: &char) -> u16 {
     let num = u16::from_str_radix(&str, 16).unwrap();
     return num;
 }
-pub fn decode() -> () {}
